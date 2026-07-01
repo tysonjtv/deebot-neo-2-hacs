@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DEEBOT NEO 2",
+        "description": "Log in with your Ecovacs account. This integration only supports DEEBOT NEO 2.0 / NEO 2.0 PLUS devices with class q287s6.",
+        "data": {
+          "username": "Ecovacs email or phone",
+          "password": "Password",
+          "country": "Country"
+        }
+      },
+      "select_device": {
+        "title": "Select vacuum",
+        "description": "Choose the DEEBOT NEO 2 vacuum to add.",
+        "data": {
+          "device_did": "Vacuum"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to Ecovacs. Check your network, account region, and try again.",
+      "invalid_auth": "Invalid Ecovacs account details.",
+      "no_supported_vacuums": "No supported DEEBOT NEO 2.0 / NEO 2.0 PLUS q287s6 vacuum was found on this account.",
+      "unknown": "Unexpected error. Check Home Assistant logs for details."
+    },
+    "abort": {
+      "already_configured": "This vacuum is already configured."
+    }
+  }
+}

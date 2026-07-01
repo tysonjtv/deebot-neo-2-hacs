@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local Home Assistant patch/deployment artifacts from development
+/backups/
+/patches/
+/scripts/
+/Dockerfile
+/docker-compose.override.yml
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets and Home Assistant local state
+*.log
+*.token
+*.secret
+.storage/
+secrets.yaml
+configuration.yaml

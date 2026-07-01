@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a problem with the DEEBOT NEO 2 Home Assistant integration
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve this unofficial community integration.
+        Remove passwords, tokens, email addresses, device IDs, home locations, and local paths before submitting logs.
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.7.0"
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Vacuum model
+      options:
+        - DEEBOT NEO 2.0
+        - DEEBOT NEO 2.0 PLUS
+        - Other q287s6 device
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug logs
+      description: Include sanitized logs from custom_components.deebot_neo_2 with debug logging enabled.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I enabled debug logging for custom_components.deebot_neo_2.
+        - label: I removed secrets, account details, tokens, device IDs, and local paths from the logs.
+        - label: I confirmed my device class is q287s6.

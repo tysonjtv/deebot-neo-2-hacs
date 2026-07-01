@@ -1,0 +1,8 @@
+{
+  "name": "DEEBOT NEO 2",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["vacuum", "sensor"],
+  "iot_class": "cloud_push",
+  "homeassistant": "2025.1.0"
+}
