@@ -45,6 +45,13 @@ def _device_label(info: dict[str, Any]) -> str:
     return str(info.get("nick") or info.get("deviceName") or info.get("name") or info["did"])
 
 
+def _trim_account_id(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Trim only surrounding whitespace from the Ecovacs account field."""
+    trimmed = dict(user_input)
+    trimmed[CONF_USERNAME] = str(trimmed[CONF_USERNAME]).strip()
+    return trimmed
+
+
 async def _find_supported_devices(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -116,6 +123,7 @@ class DeebotNeo2ConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input = _trim_account_id(user_input)
             self._auth_input = {}
             self._devices = []
             devices, errors = await _find_supported_devices(self.hass, user_input)
