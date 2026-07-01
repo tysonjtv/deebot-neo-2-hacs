@@ -11,7 +11,11 @@ from typing import Any
 from aiohttp import ClientError
 from deebot_client.api_client import ApiClient
 from deebot_client.authentication import Authenticator, create_rest_config
-from deebot_client.exceptions import InvalidAuthenticationError, MqttError
+from deebot_client.exceptions import (
+    AuthenticationError,
+    InvalidAuthenticationError,
+    MqttError,
+)
 from deebot_client.mqtt_client import MqttClient, create_mqtt_config
 from deebot_client.util import md5
 import voluptuous as vol
@@ -72,6 +76,11 @@ async def _find_supported_devices(
         errors["base"] = "cannot_connect"
         return [], errors
     except InvalidAuthenticationError:
+        _LOGGER.debug("Invalid Ecovacs authentication details", exc_info=True)
+        errors["base"] = "invalid_auth"
+        return [], errors
+    except AuthenticationError:
+        _LOGGER.debug("Ecovacs authentication failed", exc_info=True)
         errors["base"] = "invalid_auth"
         return [], errors
     except MqttError:
@@ -107,6 +116,8 @@ class DeebotNeo2ConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            self._auth_input = {}
+            self._devices = []
             devices, errors = await _find_supported_devices(self.hass, user_input)
             if not errors:
                 self._auth_input = user_input
@@ -115,7 +126,9 @@ class DeebotNeo2ConfigFlow(ConfigFlow, domain=DOMAIN):
                     return await self._create_entry(devices[0])
                 return await self.async_step_select_device()
 
-        defaults = user_input or {CONF_COUNTRY: self.hass.config.country}
+        defaults = dict(user_input or {CONF_COUNTRY: self.hass.config.country})
+        if errors:
+            defaults.pop(CONF_PASSWORD, None)
         schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): selector.TextSelector(
