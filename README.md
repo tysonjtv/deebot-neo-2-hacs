@@ -24,7 +24,7 @@ This is a community integration. It is not affiliated with, endorsed by, or supp
 
 1. Install HACS
 2. Go to HACS -> three dots -> Custom repositories
-3. Add this GitHub repo URL
+3. Add this GitHub repo URL: `https://github.com/tysonjtv/deebot-neo-2-hacs`
 4. Select category: Integration
 5. Install "DEEBOT NEO 2"
 6. Restart Home Assistant
@@ -54,6 +54,8 @@ logger:
 ```
 
 When opening an issue, include the relevant `custom_components.deebot_neo_2` log lines. Remove account IDs, tokens, email addresses, and home/network details before posting logs.
+
+Issues: <https://github.com/tysonjtv/deebot-neo-2-hacs/issues>
 
 ## Troubleshooting
 
