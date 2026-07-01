@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from functools import partial
 import logging
-import random
-import string
 from typing import Any
 
 from aiohttp import ClientError
@@ -23,6 +21,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_COUNTRY, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.components.ecovacs.util import get_client_device_id
 from homeassistant.helpers import aiohttp_client, selector
 
 from . import _patch_deebot_client
@@ -37,10 +36,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _client_device_id() -> str:
-    return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-
-
 def _device_label(info: dict[str, Any]) -> str:
     return str(info.get("nick") or info.get("deviceName") or info.get("name") or info["did"])
 
@@ -52,17 +47,82 @@ def _trim_account_id(user_input: dict[str, Any]) -> dict[str, Any]:
     return trimmed
 
 
+async def _validate_input(
+    hass: HomeAssistant, user_input: dict[str, Any]
+) -> dict[str, str]:
+    """Validate Ecovacs login and MQTT using Home Assistant's official flow."""
+    errors: dict[str, str] = {}
+    device_id = get_client_device_id(hass, False)
+    country = user_input[CONF_COUNTRY]
+    rest_config = create_rest_config(
+        aiohttp_client.async_get_clientsession(hass),
+        device_id=device_id,
+        alpha_2_country=country,
+    )
+
+    authenticator = Authenticator(
+        rest_config,
+        user_input[CONF_USERNAME],
+        md5(user_input[CONF_PASSWORD]),
+    )
+
+    try:
+        await authenticator.authenticate()
+    except ClientError:
+        _LOGGER.debug("Cannot connect to Ecovacs", exc_info=True)
+        errors["base"] = "cannot_connect"
+    except InvalidAuthenticationError:
+        _LOGGER.debug("Invalid Ecovacs authentication details", exc_info=True)
+        errors["base"] = "invalid_auth"
+    except AuthenticationError:
+        _LOGGER.debug("Ecovacs authentication failed", exc_info=True)
+        errors["base"] = "invalid_auth"
+    except Exception:
+        _LOGGER.exception("Unexpected exception during Ecovacs login")
+        errors["base"] = "unknown"
+
+    if errors:
+        await authenticator.teardown()
+        return errors
+
+    mqtt_config = await hass.async_add_executor_job(
+        partial(create_mqtt_config, device_id=device_id, country=country)
+    )
+    client = MqttClient(mqtt_config, authenticator)
+
+    try:
+        await client.verify_config()
+    except MqttError:
+        _LOGGER.debug("Cannot connect to Ecovacs MQTT", exc_info=True)
+        errors["base"] = "cannot_connect"
+    except InvalidAuthenticationError:
+        _LOGGER.debug("Invalid Ecovacs authentication details during MQTT verification", exc_info=True)
+        errors["base"] = "invalid_auth"
+    except AuthenticationError:
+        _LOGGER.debug("Ecovacs authentication failed during MQTT verification", exc_info=True)
+        errors["base"] = "invalid_auth"
+    except Exception:
+        _LOGGER.exception("Unexpected exception during Ecovacs MQTT verification")
+        errors["base"] = "unknown"
+    finally:
+        await client.disconnect()
+        await authenticator.teardown()
+
+    return errors
+
+
 async def _find_supported_devices(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Validate login and return q287s6 devices."""
+    """Return q287s6 devices after official auth validation succeeds."""
     errors: dict[str, str] = {}
-    device_id = _client_device_id()
+    device_id = get_client_device_id(hass, False)
+    country = user_input[CONF_COUNTRY]
     authenticator = Authenticator(
         create_rest_config(
             aiohttp_client.async_get_clientsession(hass),
             device_id=device_id,
-            alpha_2_country=user_input[CONF_COUNTRY],
+            alpha_2_country=country,
         ),
         user_input[CONF_USERNAME],
         md5(user_input[CONF_PASSWORD]),
@@ -70,13 +130,6 @@ async def _find_supported_devices(
 
     try:
         _patch_deebot_client()
-        await authenticator.authenticate()
-        mqtt_config = await hass.async_add_executor_job(
-            partial(create_mqtt_config, device_id=device_id, country=user_input[CONF_COUNTRY])
-        )
-        mqtt_client = MqttClient(mqtt_config, authenticator)
-        await mqtt_client.verify_config()
-        await mqtt_client.disconnect()
         devices = await ApiClient(authenticator).get_devices()
     except ClientError:
         _LOGGER.debug("Cannot connect to Ecovacs", exc_info=True)
@@ -126,7 +179,9 @@ class DeebotNeo2ConfigFlow(ConfigFlow, domain=DOMAIN):
             user_input = _trim_account_id(user_input)
             self._auth_input = {}
             self._devices = []
-            devices, errors = await _find_supported_devices(self.hass, user_input)
+            errors = await _validate_input(self.hass, user_input)
+            if not errors:
+                devices, errors = await _find_supported_devices(self.hass, user_input)
             if not errors:
                 self._auth_input = user_input
                 self._devices = devices
