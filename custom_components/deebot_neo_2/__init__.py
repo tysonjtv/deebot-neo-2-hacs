@@ -2,31 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Mapping
-from functools import partial
 import logging
 import sys
 from typing import Any
 
-from deebot_client.api_client import ApiClient
-from deebot_client.authentication import Authenticator, create_rest_config
 from deebot_client.device import Device
-from deebot_client.exceptions import (
-    AuthenticationError,
-    DeebotError,
-    InvalidAuthenticationError,
-    MqttError,
-)
-from deebot_client.mqtt_client import MqttClient, create_mqtt_config
-from deebot_client.util import md5
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_COUNTRY, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.components.ecovacs.controller import EcovacsController
 from homeassistant.core import HomeAssistant
-from homeassistant.components.ecovacs.util import get_client_device_id
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import aiohttp_client
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from . import q287s6_app, q287s6_profile
 from .const import CONF_DEVICE_DID, DOMAIN, PLATFORMS, SUPPORTED_DEVICE_CLASS
@@ -40,93 +26,33 @@ def _patch_deebot_client() -> None:
     sys.modules.setdefault("deebot_client.hardware.q287s6", q287s6_profile)
 
 
-class Neo2Controller:
-    """Small deebot_client controller scoped to q287s6 devices."""
+class Neo2Controller(EcovacsController):
+    """Official Ecovacs controller with q287s6 registration and filtering."""
 
     def __init__(self, hass: HomeAssistant, config: Mapping[str, Any]) -> None:
-        self._hass = hass
+        super().__init__(hass, config)
         self._config = config
-        self._device_id = get_client_device_id(hass, False)
-        self._devices: list[Device] = []
-        country = config[CONF_COUNTRY]
-
-        self._authenticator = Authenticator(
-            create_rest_config(
-                aiohttp_client.async_get_clientsession(self._hass),
-                device_id=self._device_id,
-                alpha_2_country=country,
-            ),
-            config[CONF_USERNAME],
-            md5(config[CONF_PASSWORD]),
-        )
-        self._api_client = ApiClient(self._authenticator)
-        self._mqtt_config_fn = partial(
-            create_mqtt_config,
-            device_id=self._device_id,
-            country=country,
-        )
-        self._mqtt_client: MqttClient | None = None
-
-    @property
-    def devices(self) -> list[Device]:
-        """Return initialized q287s6 devices."""
-        return self._devices
 
     async def initialize(self) -> None:
-        """Authenticate, initialize MQTT, and load the selected q287s6 device."""
+        """Register q287s6, then run the official Ecovacs controller setup."""
         _patch_deebot_client()
+        await super().initialize()
 
-        try:
-            device_list = await self._api_client.get_devices()
-            await self._authenticator.authenticate()
-            selected_did = self._config.get(CONF_DEVICE_DID)
-            mqtt_devices = [
-                info
-                for info in device_list.mqtt
-                if info.get("class") == SUPPORTED_DEVICE_CLASS
-                and (selected_did is None or info.get("did") == selected_did)
-            ]
-            if not mqtt_devices:
-                raise ConfigEntryNotReady("No selected q287s6 device found")
+        selected_did = self._config.get(CONF_DEVICE_DID)
+        selected_devices: list[Device] = []
+        for device in self._devices:
+            if device.device_info.get("class") == SUPPORTED_DEVICE_CLASS and (
+                selected_did is None or device.device_info.get("did") == selected_did
+            ):
+                selected_devices.append(device)
+            else:
+                await device.teardown()
 
-            mqtt = await self._get_mqtt_client()
-
-            async with asyncio.TaskGroup() as task_group:
-                for info in mqtt_devices:
-                    device = Device(info, self._authenticator)
-                    task_group.create_task(self._initialize_device(device, mqtt))
-        except InvalidAuthenticationError as err:
-            raise ConfigEntryAuthFailed("Invalid Ecovacs credentials") from err
-        except AuthenticationError as err:
-            raise ConfigEntryAuthFailed("Ecovacs authentication failed") from err
-        except (DeebotError, MqttError) as err:
-            raise ConfigEntryNotReady("Ecovacs setup failed") from err
+        self._devices = selected_devices
+        if not self._devices:
+            raise ConfigEntryNotReady("No selected q287s6 device found")
 
         _LOGGER.debug("Initialized %s q287s6 device(s)", len(self._devices))
-
-    async def _get_mqtt_client(self) -> MqttClient:
-        """Return validated MQTT client using Home Assistant's official pattern."""
-        if self._mqtt_client is None:
-            config = await self._hass.async_add_executor_job(self._mqtt_config_fn)
-            mqtt = MqttClient(config, self._authenticator)
-            await mqtt.verify_config()
-            self._mqtt_client = mqtt
-
-        return self._mqtt_client
-
-    async def _initialize_device(self, device: Device, mqtt: MqttClient) -> None:
-        await device.initialize(mqtt)
-        self._devices.append(device)
-
-    async def teardown(self) -> None:
-        """Disconnect devices and clients."""
-        for device in self._devices:
-            await device.teardown()
-        self._devices.clear()
-        if self._mqtt_client is not None:
-            await self._mqtt_client.disconnect()
-            self._mqtt_client = None
-        await self._authenticator.teardown()
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
