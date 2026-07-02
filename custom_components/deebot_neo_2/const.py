@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "deebot_neo_2"
 NAME = "DEEBOT NEO 2"
-VERSION = "0.1.0"
+VERSION = "0.1.3"
 
 SUPPORTED_DEVICE_CLASS = "q287s6"
 SUPPORTED_MODELS = {"DEEBOT NEO 2.0", "DEEBOT NEO 2.0 PLUS"}

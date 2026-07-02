@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Coroutine
 import logging
+from time import monotonic
 from typing import Any
 
 from deebot_client.device import Device
@@ -39,6 +41,9 @@ _SUCTION_LABELS = {
     FanSpeedLevel.MAX_PLUS: "max",
 }
 
+_RETURN_TO_DOCK_REFRESH_INTERVAL = 30
+_RETURN_TO_DOCK_FALLBACK_TIMEOUT = 20 * 60
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -58,6 +63,7 @@ class Neo2VacuumEntity(StateVacuumEntity):
     _attr_should_poll = False
     _attr_supported_features = (
         VacuumEntityFeature.START
+        | VacuumEntityFeature.PAUSE
         | VacuumEntityFeature.RETURN_HOME
         | VacuumEntityFeature.STATE
         | VacuumEntityFeature.FAN_SPEED
@@ -70,6 +76,7 @@ class Neo2VacuumEntity(StateVacuumEntity):
         self._attr_activity = VacuumActivity.IDLE
         self._attr_available = True
         self._attr_fan_speed_list = list(_SUCTION_LABELS.values())
+        self._return_to_dock_task: asyncio.Task[None] | None = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -94,6 +101,8 @@ class Neo2VacuumEntity(StateVacuumEntity):
         async def on_state(event: StateEvent) -> None:
             self._attr_available = True
             self._attr_activity = _STATE_TO_ACTIVITY.get(event.state, VacuumActivity.IDLE)
+            if self._attr_activity != VacuumActivity.RETURNING:
+                self._cancel_return_to_dock_monitor()
             self.async_write_ha_state()
 
         async def on_fan_speed(event: FanSpeedEvent) -> None:
@@ -110,6 +119,11 @@ class Neo2VacuumEntity(StateVacuumEntity):
         self._subscribe(FanSpeedEvent, on_fan_speed)
         self._subscribe(BatteryEvent, on_battery)
         self.async_schedule_update_ha_state(force_refresh=True)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel pending q287s6 fallback work before removing the entity."""
+        self._cancel_return_to_dock_monitor()
+        await super().async_will_remove_from_hass()
 
     def _subscribe[EventT: Event](
         self,
@@ -131,9 +145,16 @@ class Neo2VacuumEntity(StateVacuumEntity):
         """Start an auto clean."""
         await self._execute("start", self._device.capabilities.clean.action.command(CleanAction.START))
 
+    async def async_pause(self) -> None:
+        """Pause the current clean."""
+        await self._execute("pause", self._device.capabilities.clean.action.command(CleanAction.PAUSE))
+
     async def async_return_to_base(self, **kwargs: Any) -> None:
         """Return the vacuum to the dock."""
         await self._execute("return_to_base", self._device.capabilities.charge.execute())
+        self._attr_activity = VacuumActivity.RETURNING
+        self.async_write_ha_state()
+        self._start_return_to_dock_monitor()
 
     async def async_set_fan_speed(self, fan_speed: str, **kwargs: Any) -> None:
         """Set suction power."""
@@ -145,6 +166,58 @@ class Neo2VacuumEntity(StateVacuumEntity):
         try:
             _LOGGER.debug("q287s6 command requested: %s", action)
             await self._device.execute_command(command)
+            _LOGGER.debug("q287s6 command succeeded: %s", action)
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("q287s6 command failed: %s", action)
             raise HomeAssistantError(f"DEEBOT NEO 2 command failed: {action}") from err
+
+    def _start_return_to_dock_monitor(self) -> None:
+        """Poll state after return-to-dock because q287s6 may not push dock events."""
+        self._cancel_return_to_dock_monitor()
+        self._return_to_dock_task = asyncio.create_task(self._monitor_return_to_dock())
+
+    def _cancel_return_to_dock_monitor(self) -> None:
+        if self._return_to_dock_task is not None:
+            self._return_to_dock_task.cancel()
+            self._return_to_dock_task = None
+
+    async def _monitor_return_to_dock(self) -> None:
+        """Refresh q287s6 state while returning and apply a conservative fallback."""
+        started = monotonic()
+        try:
+            while self._attr_activity == VacuumActivity.RETURNING:
+                await asyncio.sleep(_RETURN_TO_DOCK_REFRESH_INTERVAL)
+                await self._refresh_return_to_dock_state()
+                if self._attr_activity != VacuumActivity.RETURNING:
+                    return
+
+                if monotonic() - started >= _RETURN_TO_DOCK_FALLBACK_TIMEOUT:
+                    # q287s6 status can omit a final docked state even after the
+                    # app charge command succeeds. Avoid leaving Home Assistant
+                    # stuck on returning forever; real Ecovacs state events above
+                    # still win whenever the status endpoint provides them.
+                    _LOGGER.debug("q287s6 return-to-dock fallback marked docked")
+                    self._attr_activity = VacuumActivity.DOCKED
+                    self.async_write_ha_state()
+                    return
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("q287s6 return-to-dock monitor failed", exc_info=True)
+        finally:
+            if self._return_to_dock_task is asyncio.current_task():
+                self._return_to_dock_task = None
+
+    async def _refresh_return_to_dock_state(self) -> None:
+        """Request safe q287s6 refresh events without logging device identifiers."""
+        for event_type in (StateEvent, BatteryEvent):
+            if event_type not in self._subscribed_events:
+                continue
+            try:
+                self._device.events.request_refresh(event_type)
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug(
+                    "q287s6 return-to-dock refresh failed for %s",
+                    event_type,
+                    exc_info=True,
+                )

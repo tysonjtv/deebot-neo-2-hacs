@@ -97,7 +97,11 @@ class Q287s6RobotControlClean(Command):
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("q287s6 RobotControl Clean request failed")
             return {"ret": "fail", "error": str(err)}
-        _LOGGER.debug("q287s6 RobotControl Clean response: %s", response)
+        _LOGGER.debug(
+            "q287s6 RobotControl Clean response received ret=%s code=%s",
+            response.get("ret"),
+            response.get("code"),
+        )
         return response
 
     def _handle_response(
@@ -193,7 +197,10 @@ class Q287s6EndpointCommand(Command):
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("q287s6 endpoint request failed apn=%s", apn)
             return {"body": {"code": 1, "msg": str(err)}}
-        _LOGGER.debug("q287s6 endpoint response apn=%s response=%s", apn, result)
+        body = result.get("body", {})
+        _LOGGER.debug(
+            "q287s6 endpoint response apn=%s code=%s", apn, body.get("code")
+        )
         return result
 
     def _handle_response(
@@ -340,6 +347,10 @@ class Q287s6EndpointStatus(Q287s6EndpointCommand):
                 "fields": [
                     "battery",
                     "chargeStatus",
+                    "chargeState",
+                    "charging",
+                    "isCharging",
+                    "isDocked",
                     "pauseSwitch",
                     "status",
                     "workMode",
@@ -385,6 +396,7 @@ class Q287s6EndpointStatus(Q287s6EndpointCommand):
         status = data.get("status")
         work_mode = data.get("workMode")
         station_status = data.get("stationStatus")
+        charge_state = data.get("chargeState")
 
         if status in {"clean", "cleaning", "smartClean"} or work_mode in {
             "auto",
@@ -394,7 +406,14 @@ class Q287s6EndpointStatus(Q287s6EndpointCommand):
             return State.CLEANING
         if status in {"pause", "paused"} or work_mode in {"auto_pause", "pause", "paused"}:
             return State.PAUSED
-        if data.get("chargeStatus") is True:
+        if (
+            data.get("chargeStatus") is True
+            or data.get("charging") is True
+            or data.get("isCharging") is True
+            or data.get("isDocked") is True
+        ):
+            return State.DOCKED
+        if charge_state in {"charging", "docked", "charge", "charged"}:
             return State.DOCKED
         if status in {"goCharge", "goCharging", "returning"} or work_mode in {
             "return_dock",
