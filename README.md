@@ -91,8 +91,8 @@ Battery is only updated when Ecovacs returns a real battery value from the q287s
 Ecovacs accounts are region-sensitive.
 
 - Choose the same country/region you use in the Ecovacs app.
-- Your Ecovacs email/account may be case sensitive. Enter it exactly as it works in the Ecovacs app.
-- Verify your email/phone and password by logging into the official app.
+- Your Ecovacs email may be case sensitive. Enter the same email address you use in the Ecovacs Home app.
+- Verify your email and password by logging into the Ecovacs Home app.
 - If your Ecovacs app account uses a social login, create or set an Ecovacs password first if the app allows it.
 
 ### How To Enable Debug Logs

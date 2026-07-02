@@ -3,11 +3,14 @@
     "step": {
       "user": {
         "title": "DEEBOT NEO 2",
-        "description": "Log in with your Ecovacs account. This integration only supports DEEBOT NEO 2.0 / NEO 2.0 PLUS devices with class q287s6.",
+        "description": "Log in with the same Ecovacs email you use in the Ecovacs Home app. This integration only supports DEEBOT NEO 2.0 / NEO 2.0 PLUS devices with class q287s6.",
         "data": {
-          "username": "Ecovacs email or phone",
+          "username": "Ecovacs Email",
           "password": "Password",
           "country": "Country"
+        },
+        "data_description": {
+          "username": "Enter the same email address you use in the Ecovacs Home app."
         }
       },
       "select_device": {
