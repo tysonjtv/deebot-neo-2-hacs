@@ -43,6 +43,13 @@ _SUCTION_LABELS = {
 
 _RETURN_TO_DOCK_REFRESH_INTERVAL = 30
 _RETURN_TO_DOCK_FALLBACK_TIMEOUT = 20 * 60
+_SUPPORTED_FEATURES = (
+    VacuumEntityFeature.START
+    | VacuumEntityFeature.PAUSE
+    | VacuumEntityFeature.RETURN_HOME
+    | VacuumEntityFeature.STATE
+    | VacuumEntityFeature.FAN_SPEED
+)
 
 
 async def async_setup_entry(
@@ -61,13 +68,7 @@ class Neo2VacuumEntity(StateVacuumEntity):
     _attr_has_entity_name = True
     _attr_name = None
     _attr_should_poll = False
-    _attr_supported_features = (
-        VacuumEntityFeature.START
-        | VacuumEntityFeature.PAUSE
-        | VacuumEntityFeature.RETURN_HOME
-        | VacuumEntityFeature.STATE
-        | VacuumEntityFeature.FAN_SPEED
-    )
+    _attr_supported_features = _SUPPORTED_FEATURES
 
     def __init__(self, device: Device) -> None:
         self._device = device
@@ -76,6 +77,7 @@ class Neo2VacuumEntity(StateVacuumEntity):
         self._attr_activity = VacuumActivity.IDLE
         self._attr_available = True
         self._attr_fan_speed_list = list(_SUCTION_LABELS.values())
+        self._attr_supported_features = _SUPPORTED_FEATURES
         self._return_to_dock_task: asyncio.Task[None] | None = None
 
     @property
@@ -97,6 +99,11 @@ class Neo2VacuumEntity(StateVacuumEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to device events."""
         await super().async_added_to_hass()
+        _LOGGER.debug(
+            "q287s6 vacuum features registered features=%s pause=%s",
+            int(self.supported_features),
+            bool(self.supported_features & VacuumEntityFeature.PAUSE),
+        )
 
         async def on_state(event: StateEvent) -> None:
             self._attr_available = True
