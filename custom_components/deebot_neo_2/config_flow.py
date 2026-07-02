@@ -27,9 +27,24 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+NEO_2_LOGIC_ID = "y30plus_ww_h_y30h5"
+
 
 def _device_label(info: dict[str, Any]) -> str:
     return str(info.get("nick") or info.get("deviceName") or info.get("name") or info["did"])
+
+
+def _device_api_info(device: Any) -> dict[str, Any]:
+    return device.api if hasattr(device, "api") else device
+
+
+def _is_supported_neo_2(info: dict[str, Any]) -> bool:
+    device_name = str(info.get("deviceName") or "")
+    return (
+        info.get("class") == SUPPORTED_DEVICE_CLASS
+        or "NEO 2.0" in device_name
+        or info.get("UILogicId") == NEO_2_LOGIC_ID
+    )
 
 
 async def _find_supported_devices(
@@ -39,7 +54,7 @@ async def _find_supported_devices(
     errors: dict[str, str] = {}
     try:
         _patch_deebot_client()
-        await controller.initialize()
+        devices = await controller._api_client.get_devices()  # noqa: SLF001
     except ConfigEntryNotReady:
         _LOGGER.debug("Cannot connect to Ecovacs during device discovery", exc_info=True)
         errors["base"] = "cannot_connect"
@@ -55,11 +70,15 @@ async def _find_supported_devices(
     finally:
         await controller.teardown()
 
-    supported = [
-        device.device_info
-        for device in controller.devices
-        if device.device_info.get("class") == SUPPORTED_DEVICE_CLASS
-    ]
+    discovered = [_device_api_info(device) for device in devices.mqtt] + devices.not_supported
+    for info in discovered:
+        _LOGGER.debug(
+            "Ecovacs discovery saw device class=%s deviceName=%s",
+            info.get("class"),
+            info.get("deviceName"),
+        )
+
+    supported = [info for info in discovered if _is_supported_neo_2(info)]
     if not supported:
         errors["base"] = "no_supported_vacuums"
     return supported, errors

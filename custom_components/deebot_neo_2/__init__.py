@@ -7,6 +7,7 @@ import logging
 import sys
 from typing import Any
 
+import deebot_client.hardware as deebot_hardware
 from deebot_client.device import Device
 
 from homeassistant.config_entries import ConfigEntry
@@ -24,6 +25,8 @@ def _patch_deebot_client() -> None:
     """Expose q287s6 support to deebot_client before devices initialize."""
     sys.modules.setdefault("deebot_client.commands.json.q287s6_app", q287s6_app)
     sys.modules.setdefault("deebot_client.hardware.q287s6", q287s6_profile)
+    if not_found := getattr(deebot_hardware, "_NOT_FOUND", None):
+        not_found.discard(SUPPORTED_DEVICE_CLASS)
 
 
 class Neo2Controller(EcovacsController):
