@@ -8,8 +8,9 @@ DOMAIN = "deebot_neo_2"
 NAME = "DEEBOT NEO 2"
 VERSION = "0.1.3"
 
+# Kept for backwards-compatibility with any existing config-entry data that
+# stores the device class.  New code should use devices.PROFILES / SUPPORTED_CLASSES.
 SUPPORTED_DEVICE_CLASS = "q287s6"
-SUPPORTED_MODELS = {"DEEBOT NEO 2.0", "DEEBOT NEO 2.0 PLUS"}
 
 CONF_DEVICE_DID = "device_did"
 CONF_DEVICE_NAME = "device_name"

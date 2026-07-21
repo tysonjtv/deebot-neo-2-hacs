@@ -22,35 +22,30 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICE_RESOURCE,
     DOMAIN,
-    SUPPORTED_DEVICE_CLASS,
 )
+from .devices import get_profile_for_device, is_supported_device, PROFILES
 
 _LOGGER = logging.getLogger(__name__)
 
-NEO_2_LOGIC_ID = "y30plus_ww_h_y30h5"
-
 
 def _device_label(info: dict[str, Any]) -> str:
-    return str(info.get("nick") or info.get("deviceName") or info.get("name") or info["did"])
+    """Return a human-readable label for the device, including model info."""
+    base = str(info.get("nick") or info.get("deviceName") or info.get("name") or info["did"])
+    device_class = info.get("class", "")
+    profile = PROFILES.get(device_class)
+    if profile is not None:
+        return f"{base} ({profile.friendly_name})"
+    return base
 
 
 def _device_api_info(device: Any) -> dict[str, Any]:
     return device.api if hasattr(device, "api") else device
 
 
-def _is_supported_neo_2(info: dict[str, Any]) -> bool:
-    device_name = str(info.get("deviceName") or "")
-    return (
-        info.get("class") == SUPPORTED_DEVICE_CLASS
-        or "NEO 2.0" in device_name
-        or info.get("UILogicId") == NEO_2_LOGIC_ID
-    )
-
-
 async def _find_supported_devices(
     controller: EcovacsController,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Return q287s6 devices after official auth validation succeeds."""
+    """Return supported NEO 2 devices after official auth validation succeeds."""
     errors: dict[str, str] = {}
     try:
         _patch_deebot_client()
@@ -73,12 +68,22 @@ async def _find_supported_devices(
     discovered = [_device_api_info(device) for device in devices.mqtt] + devices.not_supported
     for info in discovered:
         _LOGGER.debug(
-            "Ecovacs discovery saw device class=%s deviceName=%s",
+            "Ecovacs discovery saw device class=%s UILogicId=%s",
             info.get("class"),
-            info.get("deviceName"),
+            info.get("UILogicId"),
         )
 
-    supported = [info for info in discovered if _is_supported_neo_2(info)]
+    supported = [info for info in discovered if is_supported_device(info)]
+    # Log profile assignment for each supported device (class/UI logic only, no IDs)
+    for info in supported:
+        profile = get_profile_for_device(info)
+        _LOGGER.debug(
+            "Config-flow matched device class=%s UILogicId=%s to profile=%s",
+            info.get("class"),
+            info.get("UILogicId"),
+            profile.friendly_name if profile else "unknown",
+        )
+
     if not supported:
         errors["base"] = "no_supported_vacuums"
     return supported, errors
@@ -137,7 +142,7 @@ class DeebotNeo2ConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_select_device(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user choose a q287s6 vacuum."""
+        """Let the user choose a supported DEEBOT NEO 2 vacuum."""
         if user_input is not None:
             selected = next(
                 device for device in self._devices if device["did"] == user_input[CONF_DEVICE_DID]
