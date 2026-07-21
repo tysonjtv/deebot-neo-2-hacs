@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for helping improve this unofficial community integration.
-        Remove passwords, tokens, email addresses, device IDs, home locations, and local paths before submitting logs.
+        **Before submitting:** remove all passwords, tokens, email addresses, device IDs, resource IDs, home IDs, and local paths from logs and any pasted text.
   - type: input
     id: ha_version
     attributes:
@@ -19,7 +19,7 @@ body:
     id: integration_version
     attributes:
       label: Integration version
-      placeholder: "0.1.0"
+      placeholder: "0.1.3"
     validations:
       required: true
   - type: dropdown
@@ -27,11 +27,27 @@ body:
     attributes:
       label: Vacuum model
       options:
-        - DEEBOT NEO 2.0
-        - DEEBOT NEO 2.0 PLUS
-        - Other q287s6 device
+        - DEEBOT NEO 2.0 PLUS (class q287s6)
+        - DEEBOT NEO 2.0 (class eyfj07, experimental)
+        - Other / Unknown
     validations:
       required: true
+  - type: input
+    id: device_class
+    attributes:
+      label: Device class
+      description: "The class reported in debug logs, e.g. q287s6 or eyfj07. Do NOT include device IDs."
+      placeholder: "q287s6"
+    validations:
+      required: false
+  - type: input
+    id: ui_logic_id
+    attributes:
+      label: UI Logic ID
+      description: "The UILogicId reported in debug logs, e.g. y30plus_ww_h_y30h5 or y30_ww_h_y30h5."
+      placeholder: "y30plus_ww_h_y30h5"
+    validations:
+      required: false
   - type: textarea
     id: problem
     attributes:
@@ -52,8 +68,11 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Debug logs
-      description: Include sanitized logs from custom_components.deebot_neo_2 with debug logging enabled.
+      label: Sanitized debug logs
+      description: |
+        Enable debug logging for custom_components.deebot_neo_2 and paste relevant lines here.
+        Only include lines containing: class=, UILogicId=, profile=, command/response status.
+        NEVER include: tokens, email addresses, full device IDs, resource IDs, home IDs, passwords.
       render: text
     validations:
       required: false
@@ -63,5 +82,5 @@ body:
       label: Checklist
       options:
         - label: I enabled debug logging for custom_components.deebot_neo_2.
-        - label: I removed secrets, account details, tokens, device IDs, and local paths from the logs.
-        - label: I confirmed my device class is q287s6.
+        - label: I removed all secrets, tokens, email addresses, device IDs, resource IDs, and home IDs from the logs.
+        - label: I confirmed which device class my vacuum reports (visible in debug logs with class= prefix).
